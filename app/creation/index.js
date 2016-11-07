@@ -1,6 +1,10 @@
 // ES5的声明方式
 var React = require('react-native');
 var Icon = require('react-native-vector-icons/Ionicons');
+
+var request = require('../common/request');
+var config = require('../common/config');
+
 var StyleSheet = React.StyleSheet;
 var Text = React.Text;
 var View = React.View;
@@ -8,8 +12,16 @@ var ListView = React.ListView;
 var TouchableHighlight = React.TouchableHighlight;
 var Image = React.Image;
 var Dimensions = React.Dimensions;
+var ActivityIndicatorIOS = React.ActivityIndicatorIOS;
+var RefreshControl = React.RefreshControl;
 
 var width = Dimensions.get('window').width;
+
+var cachedResults = {
+  nextPage: 1,
+  items: [],
+  total: 0
+}
 
 // 列表页面组件
 var List = React.createClass({
@@ -17,45 +29,13 @@ var List = React.createClass({
   getInitialState: function() {
     var ds = new ListView.DataSource({rowHasChanged: (r1, r2) => r1 !== r2});
     return {
-      dataSource: ds.cloneWithRows([ {
-        "_id":"440000200910255028","thumb":"http://dummyimage.com/1280*720/7d8010)","title":"测试内容7k9n","video":"http://v2.mukewang.com/c616096d-7dde-4ef1-8601-344f7024946a/L.mp4?auth_key=1478428143-0-0-0f2aac8f5020be9a30fb32b02a29630d"
-    }
-    ,
-    {
-        "_id":"110000197512127193","thumb":"http://dummyimage.com/1280*720/2cbe8b)","title":"测试内容7k9n","video":"http://v2.mukewang.com/c616096d-7dde-4ef1-8601-344f7024946a/L.mp4?auth_key=1478428143-0-0-0f2aac8f5020be9a30fb32b02a29630d"
-    }
-    ,
-    {
-        "_id":"140000201003042743","thumb":"http://dummyimage.com/1280*720/0efd0d)","title":"测试内容7k9n","video":"http://v2.mukewang.com/c616096d-7dde-4ef1-8601-344f7024946a/L.mp4?auth_key=1478428143-0-0-0f2aac8f5020be9a30fb32b02a29630d"
-    }
-    ,
-    {
-        "_id":"640000201304055626","thumb":"http://dummyimage.com/1280*720/686467)","title":"测试内容7k9n","video":"http://v2.mukewang.com/c616096d-7dde-4ef1-8601-344f7024946a/L.mp4?auth_key=1478428143-0-0-0f2aac8f5020be9a30fb32b02a29630d"
-    }
-    ,
-    {
-        "_id":"710000200705014474","thumb":"http://dummyimage.com/1280*720/fbb84a)","title":"测试内容7k9n","video":"http://v2.mukewang.com/c616096d-7dde-4ef1-8601-344f7024946a/L.mp4?auth_key=1478428143-0-0-0f2aac8f5020be9a30fb32b02a29630d"
-    }
-    ,
-    {
-        "_id":"120000199206258241","thumb":"http://dummyimage.com/1280*720/62b9f2)","title":"测试内容7k9n","video":"http://v2.mukewang.com/c616096d-7dde-4ef1-8601-344f7024946a/L.mp4?auth_key=1478428143-0-0-0f2aac8f5020be9a30fb32b02a29630d"
-    }
-    ,
-    {
-        "_id":"540000200308232054","thumb":"http://dummyimage.com/1280*720/9a40c3)","title":"测试内容7k9n","video":"http://v2.mukewang.com/c616096d-7dde-4ef1-8601-344f7024946a/L.mp4?auth_key=1478428143-0-0-0f2aac8f5020be9a30fb32b02a29630d"
-    }
-    ,
-    {
-        "_id":"210000198506242855","thumb":"http://dummyimage.com/1280*720/53df14)","title":"测试内容7k9n","video":"http://v2.mukewang.com/c616096d-7dde-4ef1-8601-344f7024946a/L.mp4?auth_key=1478428143-0-0-0f2aac8f5020be9a30fb32b02a29630d"
-    }
-    ,
-    {
-        "_id":"500000197203181914","thumb":"http://dummyimage.com/1280*720/19b1ba)","title":"测试内容7k9n","video":"http://v2.mukewang.com/c616096d-7dde-4ef1-8601-344f7024946a/L.mp4?auth_key=1478428143-0-0-0f2aac8f5020be9a30fb32b02a29630d"
-    }]),
+      isRefreshing: false,
+      isLoadingTail: false,
+      dataSource: ds.cloneWithRows([]),
     };
   },
 
-  renderRow: function(row) {
+  _renderRow: function(row) {
     return (
       <TouchableHighlight>
         <View style={styles.item}>
@@ -88,6 +68,91 @@ var List = React.createClass({
       </TouchableHighlight>
     )
   },
+  
+  componentDidMount: function() {
+    this._fetchData(1);
+  },
+
+  _fetchData(page) {
+    var that = this;
+
+    if (page !== 0) {
+      this.setState({
+        isLoadingTail: true
+      })
+    }
+    else {
+      this.setState({
+        isRefreshing: true
+      })
+    }
+
+    request.get(config.api.base + config.api.creation, {
+      accessToken: 'abcdef',
+      page: page
+    })
+      .then((data) => {
+        if (data.success) {
+          var items = cachedResults.items.slice();
+          items = items.concat(data.data);
+          cachedResults.items = items;
+          cachedResults.total = data.total;
+
+          setTimeout(function() {
+            that.setState({
+              isLoadingTail: false,
+              isRefreshing: false,
+              dataSource: that.state.dataSource.cloneWithRows(cachedResults.items)
+            })
+          },20);
+        }
+      })
+      .catch((error) => {
+        this.setState({
+            isLoadingTail: false
+        })
+        console.warn(error);
+      });
+  },
+
+  _hasMore() {
+    return cachedResults.items.length !== cachedResults.total;
+  },
+
+  _fetchMoreData() {
+    if (!this._hasMore() || this.state.isLoadingTail) {
+      return;
+    }
+
+    var page = cachedResults.nextPage;
+    this._fetchData(page)
+  },
+
+  _onRefresh() {
+
+    if (!this._hasMore() || this.state.isRefreshing) {
+      return;
+    }
+
+    this._fetchData(0);
+  },
+
+  _renderFooter() {
+    if (!this._hasMore || cachedResults.total !== 0) {
+      return (
+        <View style={styles.loadingMore}>
+          <Text style={styles.loadingText}>没有更多了！</Text>
+        </View>
+      )
+    }
+
+    if (!this.state.isLoadingTail) {
+      return <View style={styles.loadingMore} />
+    }
+
+    return <ActivityIndicatorIOS style={styles.loadingMore} />
+  },
+
   render: function() {
     return (
       <View style={styles.container}>
@@ -96,8 +161,20 @@ var List = React.createClass({
         </View>
         <ListView
           dataSource={this.state.dataSource}
-          renderRow={this.renderRow} 
+          renderRow={this._renderRow} 
+          renderFooter={this._renderFooter}
+          onEndReached={this._fetchMoreData}
+          refreshControl={
+            <RefreshControl
+              refreshing={this.state.isRefreshing}
+              onRefresh={this._onRefresh}
+              tintColor='#ff6600'
+              title='拼命加载中'
+            />
+          }
+          onEndReachedThreshold={20}
           enableEmptySections={true} 
+          showsVerticalScrollIndicator={false}
           automaticallyAdjustContentInsets={false}
         />
       </View>
@@ -185,6 +262,15 @@ var styles = StyleSheet.create({
   commentIcon: {
     fontSize: 22,
     color: '#333'
+  },
+
+  loadingMore: {
+    marginVertical: 20
+  },
+
+  loadingText: {
+    color: '#777',
+    textAlign: 'center'
   }
 
 });
