@@ -4,6 +4,7 @@ var Icon = require('react-native-vector-icons/Ionicons');
 
 var request = require('../common/request');
 var config = require('../common/config');
+var Detail = require('./detail');
 
 var StyleSheet = React.StyleSheet;
 var Text = React.Text;
@@ -14,6 +15,7 @@ var Image = React.Image;
 var Dimensions = React.Dimensions;
 var ActivityIndicatorIOS = React.ActivityIndicatorIOS;
 var RefreshControl = React.RefreshControl;
+var AlertIOS = React.AlertIOS;
 
 var width = Dimensions.get('window').width;
 
@@ -21,23 +23,52 @@ var cachedResults = {
   nextPage: 1,
   items: [],
   total: 0
-}
+};
 
 // 列表页面组件
-var List = React.createClass({
+var Item = React.createClass({
+  getInitialState() {
+    var row = this.props.row;
 
-  getInitialState: function() {
-    var ds = new ListView.DataSource({rowHasChanged: (r1, r2) => r1 !== r2});
     return {
-      isRefreshing: false,
-      isLoadingTail: false,
-      dataSource: ds.cloneWithRows([]),
-    };
+      up: row.voted,
+      row: row
+    }
   },
 
-  _renderRow: function(row) {
+  _up() {
+    var that = this;
+    var up = !this.state.up;
+    var row = this.state.row;
+    var url = config.api.base + config.api.up;
+
+    var body = {
+      id: row._id,
+      up: up ? 'yes' : 'no',
+      accessToken: 'abcdef'
+    };
+
+    request.post(url, body) 
+      .then((data) => {
+        if (data && data.success) {
+          that.setState({
+            up: up
+          })
+        }
+        else {
+          AlertIOS.alert('点赞失败，稍后重试');
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+        AlertIOS.alert('点赞失败，稍后重试');
+      })
+  },
+
+  render() {
+    var row = this.state.row;
     return (
-      <TouchableHighlight>
+      <TouchableHighlight onPress={this.props.onSelect}>
         <View style={styles.item}>
           <Text style={styles.title}>{row.title}</Text>
           <Image 
@@ -51,10 +82,11 @@ var List = React.createClass({
           <View style={styles.itemFooter}>
             <View style={styles.handleBox}>
               <Icon
-                name='ios-heart-outline'
+                onPress={this._up}
+                name={this.state.up ? 'ios-heart' : 'ios-heart-outline'}
                 size={28}
-                style={styles.up} />
-              <Text style={styles.handleText}>喜欢</Text>
+                style={this.state.up ? styles.up : styles.down} />
+              <Text style={styles.handleText} onPress={this._up}>喜欢</Text>
             </View>
             <View style={styles.handleBox}>
               <Icon
@@ -67,15 +99,37 @@ var List = React.createClass({
         </View>
       </TouchableHighlight>
     )
+  }
+});
+
+
+// 列表页面组件
+var List = React.createClass({
+
+  getInitialState() {
+    var ds = new ListView.DataSource({rowHasChanged: (r1, r2) => r1 !== r2});
+    return {
+      isRefreshing: false,
+      isLoadingTail: false,
+      dataSource: ds.cloneWithRows([]),
+    };
+  },
+
+  _renderRow(row) {
+    return <Item 
+      row={row} 
+      onSelect={() => this._loadPage(row)}
+      key={row._id}
+    />
   },
   
-  componentDidMount: function() {
+  componentDidMount() {
     this._fetchData(1);
   },
 
   _fetchData(page) {
     var that = this;
-
+    var url = config.api.base + config.api.creation;
     if (page !== 0) {
       this.setState({
         isLoadingTail: true
@@ -87,7 +141,7 @@ var List = React.createClass({
       })
     }
 
-    request.get(config.api.base + config.api.creation, {
+    request.get(url, {
       accessToken: 'abcdef',
       page: page
     })
@@ -99,18 +153,33 @@ var List = React.createClass({
           cachedResults.total = data.total;
 
           setTimeout(function() {
-            that.setState({
-              isLoadingTail: false,
-              isRefreshing: false,
-              dataSource: that.state.dataSource.cloneWithRows(cachedResults.items)
-            })
+            if (page !== 0) {
+              that.setState({
+                isLoadingTail: false,
+                isRefreshing: false,
+                dataSource: that.state.dataSource.cloneWithRows(cachedResults.items)
+              })
+            }
+            else {
+              that.setState({
+                isRefreshing: false,
+                dataSource: that.state.dataSource.cloneWithRows(cachedResults.items)
+              });
+            }
           },20);
         }
       })
       .catch((error) => {
-        this.setState({
-            isLoadingTail: false
-        })
+        if (page !== 0) {
+          this.setState({
+              isLoadingTail: false
+          })
+        }
+        else {
+          this.setState({
+            isRefreshing: true
+          })
+        }
         console.warn(error);
       });
   },
@@ -152,8 +221,18 @@ var List = React.createClass({
 
     return <ActivityIndicatorIOS style={styles.loadingMore} />
   },
+  // 点击打开详情页
+  _loadPage(row) {
+    this.props.navigator.push({
+      name: 'detail',
+      component: Detail,
+      params: {
+        data: row
+      }
+    })
+  },
 
-  render: function() {
+  render() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -255,6 +334,11 @@ var styles = StyleSheet.create({
   },
 
   up: {
+    fontSize: 22,
+    color: '#ed7b66'
+  },
+
+  down: {
     fontSize: 22,
     color: '#333'
   },
