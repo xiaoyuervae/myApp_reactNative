@@ -1,3 +1,4 @@
+'use strict'
 // ES5的声明方式
 var React = require('react-native');
 var Icon = require('react-native-vector-icons/Ionicons');
@@ -16,6 +17,7 @@ var Image = React.Image;
 var ListView = React.ListView;
 var TextInput = React.TextInput;
 var Modal = React.Modal;
+var RefreshControl = React.RefreshControl;
 
 var cachedResults = {
   nextPage: 1,
@@ -29,9 +31,7 @@ var width = Dimensions.get('window').width;
 var Detail = React.createClass({
   getInitialState() {
     var data = this.props.data;
-    var ds = new ListView.DataSource({
-      rowHasChanged: (r1, r2) => r1 !== r2
-    });
+    var ds = new ListView.DataSource({rowHasChanged: (r1, r2) => r1 !== r2});
     return {
       data: data,
 
@@ -128,36 +128,59 @@ var Detail = React.createClass({
   },
 
   _fetchData(page) {
-    var that = this;
-    var url = config.api.base + config.api.comment;
-    this.setState({
-      isLoadingTail: true
-    });
+    var that = this
+      , states = {}
+      , url = config.api.base + config.api.comment
+
+    if( page !== 0 ) this.state.isLoading = true
+    else states.isRefreshing = true
+
+    that.setState(states)
 
     request.get(url, {
-      accessToken: 'abcdef',
-      creation: 124,
-      page: page
-    })
+        accessToken: 'abcdef',
+        page: page,
+        creation: '123',
+      })
       .then((data) => {
-        if (data.success) {
-          var items = cachedResults.items.slice();
+        console.log(data)
+        if(data.success){
+          var datas = cachedResults.items.slice()
+          var items = []
+            , states = {}
 
-          items = items.concat(data.data);
-          cachedResults.nextPage += 1;
-          cachedResults.items = items;
-          cachedResults.total = data.total;
- 
-          that.setState({
-            items: items,
-            dataSource: that.state.dataSource.cloneWithRows(cachedResults.items)          });  
+          if( page !== 0 ){
+            items = datas.concat(data.data)
+            states = {
+              nextPage: this.state.nextPage + 1,
+              isLoading: false,
+            }
+          }else{
+            items = (data.data).concat(datas)
+            states = {
+              isRefreshing: false,
+            }
+          }
+
+          states.items = items
+          states.total = data.total
+          states.dataSource = that.state.dataSource.cloneWithRows(items)
+          console.log(states)
+          setTimeout(function(){
+            that.setState(states)
+          },0)
         }
+
       })
       .catch((error) => {
-        this.setState({
-          isLoadingTail: false
-        });
-      });
+        var states = {}
+
+        if(page !== 0) states.isLoading = false
+        else states.isRefreshing = false
+
+        that.setState(states)
+        console.error(error)
+      })
   },
 
   _hasMore() {
@@ -205,7 +228,8 @@ var Detail = React.createClass({
   },
 
   
-  _renderRow() {
+  _renderRow(row) {
+    console.log(row);
     return (
       <View style={styles.replyBox} key={row._id}> 
         <Image style={styles.replyAvatar} source={{uri: row.replyBy.avatar}} />
@@ -234,10 +258,21 @@ var Detail = React.createClass({
 
     return <ActivityIndicatorIOS style={styles.loadingMore} />
   },
+
+  _refreshControl() {
+    return (<RefreshControl
+      refreshing={this.state.isRefreshing}
+      onRefresh={this._onRefresh}
+      tintColor="#ff0000"
+      title="加载中..."
+      titleColor="#00ff00"
+      colors={['#ff0000', '#00ff00', '#0000ff']}
+      progressBackgroundColor="#ffff00"
+    />)
+  },
   
-  render: function() {
+  render() {
     var data = this.state.data;
-    console.log(data);
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -298,21 +333,22 @@ var Detail = React.createClass({
             <View style={styles.progressBar, {width: width * this.state.videoProgress}}>
             </View>
           </View>
-
-        
-          <ListView
-            dataSource={this.state.dataSource}
-            renderRow={this._renderRow} 
-            renderHeader={this._renderHeader}
-            renderFooter={this._renderFooter}
-            onEndReached={this._fetchMoreData}
-            onEndReachedThreshold={20}
-            enableEmptySections={true} 
-            showsVerticalScrollIndicator={false}
-            automaticallyAdjustContentInsets={false}
-          />
-          
         </View>
+
+        <ListView
+          dataSource={this.state.dataSource}
+          renderRow={this._renderRow}
+          enableEmptySections={true}
+          automaticallyAdjustContentInsets={false}
+          showsVerticalScrollIndicator={false}
+          renderHeader={this._renderHeader}
+          renderFooter={this._renderFooter}
+          refreshControl={this._refreshControl()}
+          onEndReached={this._fetchMoreData}
+          onEndReachedThreshold={64}
+        />
+          
+        
       </View>
     )
   }
@@ -482,7 +518,7 @@ var styles = StyleSheet.create({
   listHeader: {
     marginTop: 10,
     width: width
-  }
+  },
 
   commentBox: {
     marginTop: 10,

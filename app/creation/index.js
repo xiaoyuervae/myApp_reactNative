@@ -25,7 +25,7 @@ var cachedResults = {
   total: 0
 };
 
-// 列表页面组件
+// 列表页面子组件
 var Item = React.createClass({
   getInitialState() {
     var row = this.props.row;
@@ -172,7 +172,7 @@ var List = React.createClass({
       .catch((error) => {
         if (page !== 0) {
           this.setState({
-              isLoadingTail: false
+            isLoadingTail: false
           })
         }
         else {
