@@ -17,7 +17,7 @@ var Image = React.Image;
 var ListView = React.ListView;
 var TextInput = React.TextInput;
 var Modal = React.Modal;
-var RefreshControl = React.RefreshControl;
+var Button = React.Button;
 
 var cachedResults = {
   nextPage: 1,
@@ -37,6 +37,7 @@ var Detail = React.createClass({
 
       // comments
       dataSource: ds.cloneWithRows([]),
+      isLoadingTail: false,
       // video loads
       videoLoaded: false,
       playing: false,
@@ -50,8 +51,28 @@ var Detail = React.createClass({
       rate: 1,
       muted: false,
       resizeMode: 'contain',
-      repeat:false
+      repeat:false,
+
+      // modal
+      content: '',
+      animationType: 'none',
+      modalVisible: false,
+      isSending: false
     }
+  },
+
+  _renderRow(row) {
+    return (
+      <View style={styles.replyBox} key={row._id}> 
+        <Image style={styles.replyAvatar} source={{uri: row.replyBy.avatar}} />
+        <View style={styles.reply}>
+          <Text style={styles.replyNickName}>
+            {row.replyBy.nickname}
+          </Text>
+          <Text style={styles.replyContent}>{row.content}</Text>
+        </View>
+      </View>
+    )
   },
 
   _pop() {
@@ -66,28 +87,30 @@ var Detail = React.createClass({
     console.log('on load');
   },
 
-  _onProgress(data) {
-    if (!this.state.videoLoaded) {
+  //第一次开始播放视频时触发，每隔250毫秒触发一次
+  _onProgress(data){
+    if(!this.state.videoLoaded){
       this.setState({
         videoLoaded: true
       })
     }
-
-    var duration = data.playableDuration;
-    var currentTime = data.currentTime;
-    var percent = Number((currentTime / duration).toFixed(2));
-    var newState = {
+    //视频播放的进度条值
+    var duration = data.playableDuration;  //视频总共播放的时间
+    var currentTime = data.currentTime;   //视频已经播放的时间
+    var percent = Number((currentTime / duration).toFixed(2)); //保留小数后2位
+    var newState= {
       videoTotal: duration,
       currentTime: Number(data.currentTime.toFixed(2)),
-      videoProgress: percent
+      videoProgress: percent  //视频播放的目前时间
     };
-    if (!this.state.videoLoaded) {
+    if(!this.state.videoLoaded){
       newState.videoLoaded = true;
     }
-    if (!this.state.playing) {
+    if(!this.state.playing){
       newState.playing = true;
     }
     this.setState(newState);
+
   },
 
   _onEnd() {
@@ -108,7 +131,7 @@ var Detail = React.createClass({
   },
 
   _pause() {
-    if (this.state.paused) {
+    if (!this.state.paused) {
       this.setState({
         paused: true
       })
@@ -116,7 +139,7 @@ var Detail = React.createClass({
   },
 
   _resume() {
-    if (!this.state.paused) {
+    if (this.state.paused) {
       this.setState({
         paused: false
       })
@@ -124,63 +147,39 @@ var Detail = React.createClass({
   },
 
   componentDidMount() {
-    this._fetchData();
+    this._fetchData(1);
   },
 
   _fetchData(page) {
-    var that = this
-      , states = {}
-      , url = config.api.base + config.api.comment
+    var that = this;
+    this.setState({
+      isLoadingTail: true  //显示上拉加载菊花
+    });
 
-    if( page !== 0 ) this.state.isLoading = true
-    else states.isRefreshing = true
-
-    that.setState(states)
-
-    request.get(url, {
-        accessToken: 'abcdef',
-        page: page,
-        creation: '123',
-      })
+    request.get(config.api.base + config.api.comment, {
+      accessToken: 'abcdef',
+      creation: 124,
+      page: page
+    })
       .then((data) => {
-        console.log(data)
         if(data.success){
-          var datas = cachedResults.items.slice()
-          var items = []
-            , states = {}
-
-          if( page !== 0 ){
-            items = datas.concat(data.data)
-            states = {
-              nextPage: this.state.nextPage + 1,
-              isLoading: false,
-            }
-          }else{
-            items = (data.data).concat(datas)
-            states = {
-              isRefreshing: false,
-            }
-          }
-
-          states.items = items
-          states.total = data.total
-          states.dataSource = that.state.dataSource.cloneWithRows(items)
-          console.log(states)
-          setTimeout(function(){
-            that.setState(states)
-          },0)
+          var items = cachedResults.items.slice();  //拿到新列表数据
+          items = items.concat(data.data); //将旧数据和新数据连接起来
+          cachedResults.nextPage += 1;  //每次请求页数加1
+          cachedResults.items = items;  //将新数据存储到cachedResults去
+          cachedResults.total = data.total;
+          that.setState({
+            isLoadingTail: false,
+            dataSource: that.state.dataSource.cloneWithRows(cachedResults.items)
+          });
         }
-
       })
       .catch((error) => {
-        var states = {}
-
-        if(page !== 0) states.isLoading = false
-        else states.isRefreshing = false
-
-        that.setState(states)
-        console.error(error)
-      })
+        this.setState({
+          isLoadingTail: false
+        });
+        console.warn(error)
+      });
   },
 
   _hasMore() {
@@ -197,7 +196,19 @@ var Detail = React.createClass({
   },
 
   _focus() {
-    //
+    this._setModalVisible(true);
+  },
+
+  //显示弹出浮层
+  _setModalVisible(isVisible){
+    this.setState({
+      modalVisible: isVisible
+    });
+  },
+
+  //失去焦点时触发
+  _blur(){
+    this._setModalVisible(false);
   },
 
   _renderHeader() {
@@ -212,7 +223,7 @@ var Detail = React.createClass({
           </View>
         </View>
         <View style={styles.commentBox}>
-          <View style={styles.commetn}>
+          <View style={styles.comment}>
             <TextInput
               placeholder='敢不敢评论一个...'
               style={styles.content}
@@ -222,22 +233,8 @@ var Detail = React.createClass({
           </View>
         </View>
 
-        <View style={styles.commentArea}></View>
-      </View>
-    )
-  },
-
-  
-  _renderRow(row) {
-    console.log(row);
-    return (
-      <View style={styles.replyBox} key={row._id}> 
-        <Image style={styles.replyAvatar} source={{uri: row.replyBy.avatar}} />
-        <View style={styles.reply}>
-          <Text style={styles.replyNickName}>
-            {row.replyBy.nickname}
-          </Text>
-          <Text style={styles.replyContent}>{row.content}</Text>
+        <View style={styles.commentArea}>
+          <Text style={styles.commentTitle}>精彩评论</Text>
         </View>
       </View>
     )
@@ -259,16 +256,58 @@ var Detail = React.createClass({
     return <ActivityIndicatorIOS style={styles.loadingMore} />
   },
 
-  _refreshControl() {
-    return (<RefreshControl
-      refreshing={this.state.isRefreshing}
-      onRefresh={this._onRefresh}
-      tintColor="#ff0000"
-      title="加载中..."
-      titleColor="#00ff00"
-      colors={['#ff0000', '#00ff00', '#0000ff']}
-      progressBackgroundColor="#ffff00"
-    />)
+    //处理评论内容提交
+  _submit(){
+    var that = this;
+    if(!this.state.content){
+      return AlertIOS.alert('留言不能为空！');
+    }
+    if(this.state.isSending){
+      return AlertIOS.alert('正在评论中！');
+    }
+    this.setState({
+      isSending: true
+    }, function(){
+      var body = {
+        accessToken: 'abc',
+        creation: '1323',
+        content: this.state.content
+      }
+      var url = config.api.base + config.api.comment
+
+      request.post(url, body)
+        .then(function(data){
+          if(data && data.success){
+            var items = cachedResults.items.slice()
+            var content = that.state.content
+            items = [{
+              content: that.state.content,
+              replyBy: {
+                avatar: 'http://dummyimage.com/640x640/8ac0c8)',
+                nickname: '狗狗狗说'
+              }
+            }].concat(items);
+            cachedResults.items = items;
+            cachedResults.total = cachedResults.total + 1;
+            
+            that.setState({
+              content: '',
+              isSending: false,
+              dataSource: that.state.dataSource.cloneWithRows(cachedResults.items)
+            });
+            that._setModalVisible(false);
+          }
+        })
+        .catch((err) => {
+          console.log(err)
+          that.setState({
+            isSending: false
+          })
+          that._setModalVisible(false);
+          AlertIOS.alert('留言失败，稍后重试！');
+        })
+    })
+    
   },
   
   render() {
@@ -300,39 +339,44 @@ var Detail = React.createClass({
             onEnd={this._onEnd}
             onError={this._onError}
           />
-          {
+          { //视频出错了，文字提示
             !this.state.videoOk && <Text style={styles.failText}>视频出错了！很抱歉</Text>
-          }
-          {
-            !this.state.videoLoaded && <ActivityIndicatorIOS color='#ee735c' style={styles.loading} />
-          }
-          {
-            this.state.videoLoaded && !this.state.playing 
+          }  
+
+          { //加载视频时的转动的提示进度条
+            !this.state.videoLoaded && <ActivityIndicatorIOS color='#ee735c' style={styles.loading}/>
+          }  
+
+          { //重新播放视频按钮
+            this.state.videoLoaded && !this.state.playing
             ? <Icon
-                onPress={this._rePlay}
+                onPress={this._rePlay} 
                 name='ios-play'
                 size={48}
-                style={styles.playIcon}
-              />
-            : null
-          }
+                style={styles.playIcon} />
+             : null  
+          }  
 
-          {
+          { //在视频加载完和播放中，2个条件同时成立才能点击视频任意地方可以暂定视频
             this.state.videoLoaded && this.state.playing
             ? <TouchableOpacity onPress={this._pause} style={styles.pauseBtn}>
-                {
-                  this.state.paused
-                  ? <Icon onPress={this._resume} name='ios-play' style={styles.resumeIcon} size={48}/>
-                  : <Text></Text>
-                }
-              </TouchableOpacity>
+              
+              { //如果点击了视频才会出现这个暂停按钮
+                this.state.paused
+                ? <Icon 
+                    onPress={this._resume}
+                    name='ios-play'
+                    size={48}
+                    style={styles.resumeIcon}/>
+                : <Text></Text>    
+              }
+            </TouchableOpacity>
             : null
           }
 
           <View style={styles.progressBox}>
-            <View style={styles.progressBar, {width: width * this.state.videoProgress}}>
-            </View>
-          </View>
+            <View style={[styles.progressBar, {width: width * this.state.videoProgress}]}></View>
+          </View> 
         </View>
 
         <ListView
@@ -343,12 +387,38 @@ var Detail = React.createClass({
           showsVerticalScrollIndicator={false}
           renderHeader={this._renderHeader}
           renderFooter={this._renderFooter}
-          refreshControl={this._refreshControl()}
           onEndReached={this._fetchMoreData}
           onEndReachedThreshold={64}
         />
-          
-        
+
+        <Modal
+          animationType={'fade'}
+          visible={this.state.modalVisible}
+          onRequestClose={() => {this._setModalVisible(false)}} >
+          <View style={styles.modalContainer}>
+            <Icon
+              onPress={this._closeModal}
+              name='ios-close-outline'
+              style={styles.closeIcon} />
+            <View style={styles.commentBox}>
+              <View style={styles.comment}>
+                <TextInput
+                  placeholder='敢不敢评论一个'
+                  style={styles.content}
+                  multiline={true}
+                  defaultValue={this.state.content}
+                  onChangeText={(text) => {
+                    this.setState({
+                      content: text
+                    })
+                  }}
+                />
+              </View>
+            </View>  
+            <Button style={styles.submitBtn} onPress={this._submit}>评论
+            </Button>
+          </View>
+        </Modal>
       </View>
     )
   }
@@ -413,7 +483,7 @@ var styles = StyleSheet.create({
   loading: {
     position: 'absolute',
     left: 0,
-    top: 140,
+    top: 80,
     width: width,
     alignSelf: 'center',
     backgroundColor: 'transparent'
@@ -421,24 +491,25 @@ var styles = StyleSheet.create({
 
   progressBox: {
     width: width,
-    height: 4,
+    height: 2,
     backgroundColor: '#ccc'
   },
 
   progressBar: {
     width: 1,
-    height: 4,
+    height: 2,
     backgroundColor: '#ff6600'
   },
 
+  //重新播放按钮
   playIcon: {
     position: 'absolute',
-    top: 140,
-    left: width/2 - 30,
+    top: 90,
+    left: width / 2 - 30,
     width: 60,
     height: 60,
     paddingTop: 8,
-    paddingLeft: 20,
+    paddingLeft: 22,
     backgroundColor: 'transparent',
     borderColor: '#fff',
     borderWidth: 1,
@@ -446,20 +517,23 @@ var styles = StyleSheet.create({
     color: '#ed7b66'
   },
 
+  //暂停视频按钮
   pauseBtn: {
     position: 'absolute',
+    left: 0,
+    top: 0,
     width: width,
     height: 360
   },
 
   resumeIcon: {
     position: 'absolute',
-    top: 140,
-    left: width/2 - 30,
+    top: 80,
+    left: width / 2 - 30,
     width: 60,
     height: 60,
     paddingTop: 8,
-    paddingLeft: 20,
+    paddingLeft: 22,
     backgroundColor: 'transparent',
     borderColor: '#fff',
     borderWidth: 1,
@@ -514,7 +588,7 @@ var styles = StyleSheet.create({
     color: '#777',
     textAlign: 'center'
   },
-
+  // 评论
   listHeader: {
     marginTop: 10,
     width: width
@@ -545,7 +619,63 @@ var styles = StyleSheet.create({
     paddingRight: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#eee'
+  },
+
+  commentTitle: {
+
+  },
+
+  //评论用户列表
+  replyBox: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginTop: 10
+  },
+
+  replyAvatar: {
+    width: 40,
+    height: 40,
+    marginRight: 10,
+    marginLeft: 10,
+    borderRadius: 20
+  },
+
+  replyNickname: {
+    color: '#666'
+  },
+
+  replyContent: {
+    marginTop: 4,
+    color: '#666'
+  },
+
+  //弹出浮层评论
+  modalContainer: {
+    flex: 1,
+    paddingTop: 45,
+    backgroundColor: '#fff'
+  },
+
+  closeIcon: {
+    alignSelf: 'center',
+    fontSize: 30,
+    color: '#ee753c'
+  },
+
+  //提交评论内容按钮
+  submitBtn: {
+    width: width - 20,
+    padding: 16,
+    marginTop: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#ee753c',
+    borderRadius: 4,
+    fontSize: 18,
+    color: '#ee753c'
   }
+
+
 });
 
 module.exports = Detail;
