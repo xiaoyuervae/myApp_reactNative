@@ -3,6 +3,7 @@
 var React = require('react-native');
 var Icon = require('react-native-vector-icons/Ionicons');
 var Video = require('react-native-video').default;
+var Button = require('react-native-button');
 
 var request = require('../common/request');
 var config = require('../common/config');
@@ -17,7 +18,7 @@ var Image = React.Image;
 var ListView = React.ListView;
 var TextInput = React.TextInput;
 var Modal = React.Modal;
-var Button = React.Button;
+var AlertIOS = React.AlertIOS;
 
 var cachedResults = {
   nextPage: 1,
@@ -211,6 +212,10 @@ var Detail = React.createClass({
     this._setModalVisible(false);
   },
 
+  _closeModal() {
+    this._setModalVisible(false);
+  },
+
   _renderHeader() {
     var data = this.state.data;
     return(
@@ -228,7 +233,7 @@ var Detail = React.createClass({
               placeholder='敢不敢评论一个...'
               style={styles.content}
               multiline={true}
-              onFocus={this._onfocus}
+              onFocus={this._focus}
             />
           </View>
         </View>
@@ -273,13 +278,13 @@ var Detail = React.createClass({
         creation: '1323',
         content: this.state.content
       }
-      var url = config.api.base + config.api.comment
+      var url = config.api.base + config.api.comment;
 
       request.post(url, body)
         .then(function(data){
           if(data && data.success){
-            var items = cachedResults.items.slice()
-            var content = that.state.content
+            var items = cachedResults.items.slice();
+            var content = that.state.content;
             items = [{
               content: that.state.content,
               replyBy: {
@@ -390,7 +395,11 @@ var Detail = React.createClass({
           onEndReached={this._fetchMoreData}
           onEndReachedThreshold={64}
         />
-
+        { 
+          // 评论浮层
+          // 弹出浮层，animationType呼出动画形式，visible是否可见
+          // onRequestClose 当关闭弹出浮层时触发回调函数
+        }
         <Modal
           animationType={'fade'}
           visible={this.state.modalVisible}
@@ -406,6 +415,8 @@ var Detail = React.createClass({
                   placeholder='敢不敢评论一个'
                   style={styles.content}
                   multiline={true}
+                  onFocus={this._onfocus}
+
                   defaultValue={this.state.content}
                   onChangeText={(text) => {
                     this.setState({
@@ -428,6 +439,18 @@ var styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5FCFF',
+  },
+
+  modalContainer: {
+    flex: 1,
+    paddingTop: 45,
+    backgroundColor: '#fff'
+  },
+
+  closeIcon: {
+    alignSelf: 'center',
+    fontSize: 30,
+    color: '#ee753c'
   },
   
   header: {

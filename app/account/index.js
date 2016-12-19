@@ -10,7 +10,15 @@ var Account = React.createClass({
   render: function() {
     return (
       <View style={styles.container}>
-        <Text>账户页面</Text>
+        <Text style={[styles.item,styles.item1]}>
+          老大，你😊吗？
+        </Text>
+        <View style={[styles.item,styles.item2]}>
+          <Text>老二，你不爽么？</Text>
+        </View>
+        <View style={[styles.item,styles.item3]}>
+          <Text>老三，老大老二欺负你吗？</Text>
+        </View>
       </View>
     )
   }
@@ -19,19 +27,25 @@ var Account = React.createClass({
 var styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
+    paddingTop: 30,
+    flexDirection: 'row',
+    backgroundColor: '#ff6600',
+    flexWrap: 'nowrap',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#F5FCFF',
+    paddingBottom: 70
   },
-  welcome: {
-    fontSize: 20,
-    textAlign: 'center',
-    margin: 10,
+  item1: {
+    flex: 1,
+    backgroundColor: '#ccc',
   },
-  instructions: {
-    textAlign: 'center',
-    color: '#333333',
-    marginBottom: 5,
+  item2: {
+    flex: 2,
+    backgroundColor: '#999',
+  },
+  item3: {
+    flex: 1,
+    backgroundColor: '#666',
   },
 });
 
